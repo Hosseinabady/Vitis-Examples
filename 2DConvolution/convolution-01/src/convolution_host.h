@@ -16,7 +16,7 @@
 #include <CL/cl2.hpp>
 #include <CL/cl_ext_xilinx.h>
 
-
+typedef unsigned int u32;
 
 #define OCL_CHECK(error,call)                                       \
     call;                                                           \

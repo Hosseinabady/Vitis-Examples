@@ -15,9 +15,9 @@ double hardware_execution_time;
 
 
 void convolution_sw(
-		data_type *input,
-		data_type *output,
-		data_type *mask,
+		std::vector<data_type,aligned_allocator<data_type>> input,
+		std::vector<data_type,aligned_allocator<data_type>> output,
+		std::vector<data_type,aligned_allocator<data_type>> mask,
 		int        n,
 		int        m,
 
@@ -62,10 +62,10 @@ int main(int argc, char** argv)
 
 
 
-	std::vector<DATA_TYPE,aligned_allocator<data_type>> input_h(sizeof(data_type) * n * m);
-	std::vector<DATA_TYPE,aligned_allocator<data_type>> output_h_hw(sizeof(data_type) * n*m);
-	std::vector<DATA_TYPE,aligned_allocator<data_type>> output_h_sw(sizeof(data_type) * n*m);
-	std::vector<DATA_TYPE,aligned_allocator<data_type>> mask_h(sizeof(data_type) * p*q);
+	std::vector<data_type,aligned_allocator<data_type>> input_h(sizeof(data_type) * n * m);
+	std::vector<data_type,aligned_allocator<data_type>> output_h_hw(sizeof(data_type) * n*m);
+	std::vector<data_type,aligned_allocator<data_type>> output_h_sw(sizeof(data_type) * n*m);
+	std::vector<data_type,aligned_allocator<data_type>> mask_h(sizeof(data_type) * p*q);
 
 	for (int i = 0; i < n; i++) {
 		for (int j = 0; j < m; j++) {
@@ -75,9 +75,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-	for(size_t i = 0 ; i < n ; i++){
-		y_h_hw[i] = y_h_sw[i] = rand()/(1.0*RAND_MAX);
-	}
+
 
 	for (int i = 0; i < p; i++) {
 		for (int j = 0; j < q; j++) {
@@ -95,7 +93,7 @@ int main(int argc, char** argv)
 
     //Creating Context and Command Queue for selected device
     cl::Context context(device);
-    cl::CommandQueue q(context, device);
+    cl::CommandQueue cq(context, device);
 
     // Import XCLBIN
     xclbin_file_name = argv[1];
@@ -110,13 +108,13 @@ int main(int argc, char** argv)
 
 
     OCL_CHECK(err, cl::Buffer buffer_input(context,CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-    		sizeof(DATA_TYPE) * n * m, input_h.data(), &err));
+    		sizeof(data_type) * n * m, input_h.data(), &err));
 
     OCL_CHECK(err, cl::Buffer buffer_mask(context,CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-    		sizeof(DATA_TYPE) * p * q, mask_h.data(), &err));
+    		sizeof(data_type) * p * q, mask_h.data(), &err));
 
-    OCL_CHECK(err, cl::Buffer buffer_output   (context,CL_MEM_USE_HOST_PTR | CL_MEM_WRITE,
-    		sizeof(DATA_TYPE) * n, output_h_hw.data(), &err));
+    OCL_CHECK(err, cl::Buffer buffer_output   (context,CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY,
+    		sizeof(data_type) * n, output_h_hw.data(), &err));
 
 
 
@@ -130,13 +128,13 @@ int main(int argc, char** argv)
 
     hardware_start = getTimestamp();
 
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_input, buffer_mask},0/* 0 means from host*/));
+    OCL_CHECK(err, err = cq.enqueueMigrateMemObjects({buffer_input, buffer_mask},0/* 0 means from host*/));
 
-    OCL_CHECK(err, err = q.enqueueTask(krnl_convolution_accel_));
+    OCL_CHECK(err, err = cq.enqueueTask(krnl_convolution_accel_));
 
 
-    OCL_CHECK(err, err = q.enqueueMigrateMemObjects({buffer_output},CL_MIGRATE_MEM_OBJECT_HOST));
-    q.finish();
+    OCL_CHECK(err, err = cq.enqueueMigrateMemObjects({buffer_output},CL_MIGRATE_MEM_OBJECT_HOST));
+    cq.finish();
     hardware_end = getTimestamp();
 
     hardware_execution_time = (hardware_end-hardware_start)/(1000);
@@ -145,7 +143,7 @@ int main(int argc, char** argv)
     int status = 0;
     for(u32 i=0; i< n; i++) {
     	for(u32 j=0; j< n*m; j++) {
-    		DATA_TYPE diff = fabs(output_h_sw[i*m+j]-output_h_hw[i*m+j]);
+    		data_type diff = fabs(output_h_sw[i*m+j]-output_h_hw[i*m+j]);
     		if(diff > 0.1 || diff != diff){
     			std::cout << "error occurs at (" << i << ", " << j << ") with value output_h_hw = " <<  output_h_hw[i*m+j] << ", should be output_h_sw = " << output_h_sw[i*m+j] << std::endl;
     			status = -1;
